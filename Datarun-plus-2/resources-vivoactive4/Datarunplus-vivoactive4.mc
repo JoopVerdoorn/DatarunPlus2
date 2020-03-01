@@ -17,23 +17,21 @@ class DatarunView extends Toybox.WatchUi.DataField {
 	using Toybox.Lang;
 	using Toybox.WatchUi as Ui;
 
+
+
 	//!Get device info
 	var mySettings = System.getDeviceSettings();
 	var screenWidth = mySettings.screenWidth;
 	var screenShape = mySettings.screenShape;
 	var screenHeight = mySettings.screenHeight;
 	var distanceUnits = mySettings.distanceUnits;
-	var watchType = mySettings.partNumber;
+
 	var is24Hour = mySettings.is24Hour;   //!boolean
 	var isTouchScreen = mySettings.isTouchScreen;  //!boolean
 	var numberis24Hour = 0;
 	var numberisTouchScreen = 0;
 
-	hidden var uNoAlerts = false;
-	hidden var uRequiredPower		 		= "000:999";
-    hidden var uWarningFreq = 5; 
-	hidden var vibrateseconds = 0;
-    
+	
     hidden var uHrZones                     = [ 93, 111, 130, 148, 167, 185 ];
     hidden var unitP                        = 1000.0;
     hidden var unitD                        = 1000.0;
@@ -43,7 +41,7 @@ class DatarunView extends Toybox.WatchUi.DataField {
 	var Pace4 								= 0;
     var Pace5 								= 0;
     var mETA								= 0;
-        
+
     hidden var uTimerDisplay                = 0;
     //! 0 => Timer
     //! 1 => Lap time
@@ -70,8 +68,8 @@ class DatarunView extends Toybox.WatchUi.DataField {
     //! false    => Show current pace without rounding (i.e. 1-second resolution)
 
 	hidden var uMaxColoringPace             = true;
-    //! true     => Show 5 colors in pacefield in middle row (-10%<, -5%<, -5% and 5%, >5%, >10%)
-    //! false    => Show 3 colors in pacefield in middle row (-5%<, -5% and 5%, >5%)
+    //! true     => Show 5 colors in pacefield in middle row (-10%<, -5%<, -5% - 5%, >5%, >10%)
+    //! false    => Show 3 colors in pacefield in middle row (-5%<, -5% - 5%, >5%)
 
 	hidden var uColoringPaceFromAver        = true;
     //! true     => Use average pace for colors in pacefield in middle row
@@ -109,14 +107,13 @@ class DatarunView extends Toybox.WatchUi.DataField {
     //! 9 => Heartrate
     //! 10 => Heartrate zone
     //! 11 => Stryd footpod power
-    //! 12 => Training effect
     //! 13 => Cadence (only for middle right field)
         
     //! Race distance
     hidden var uRacedistance                    = 42195;
 
     //! Race distance
-    hidden var uRacetime							= "03:59:48";
+    hidden var uRacetime							= "04:00:00";
 
     //! Which average pace metric should be used as the reference for deviation of the current pace? (see above)
     hidden var uTargetPaceMetric            = 0;
@@ -145,11 +142,8 @@ class DatarunView extends Toybox.WatchUi.DataField {
     hidden var mLastLapTimerTime            = 0;
     hidden var mLastLapElapsedDistance      = 0;
     hidden var mLastLapMovingSpeed          = 0;
-    hidden var uAlertbeep = false;
     
-    hidden var mtrainingEffect = 0;
-
-	var Garminfont = Ui.loadResource(Rez.Fonts.Garmin3);
+    var Garminfont = Ui.loadResource(Rez.Fonts.Garmin2);
 
     function initialize() {
         DataField.initialize();
@@ -160,9 +154,9 @@ class DatarunView extends Toybox.WatchUi.DataField {
          var mApp = Application.getApp();
          uTimerDisplay       = mApp.getProperty("pTimerDisplay");
          uDistDisplay        = mApp.getProperty("pDistDisplay");
-         uMiddlerightMetric   = mApp.getProperty("pMiddlerightMetric");         
          uBottomLeftMetric   = mApp.getProperty("pBottomLeftMetric");
          uBottomRightMetric  = mApp.getProperty("pBottomRightMetric");
+         uMiddlerightMetric   = mApp.getProperty("pMiddlerightMetric");         
          uRoundedPace        = mApp.getProperty("pRoundedPace");
          uMaxColoringPace    = mApp.getProperty("pMaxColoringPace");
          uColoringPaceFromAver= mApp.getProperty("pColoringPaceFromAver");
@@ -177,14 +171,10 @@ class DatarunView extends Toybox.WatchUi.DataField {
          uRacetime			 = mApp.getProperty("pRacetime");
          uETAfromLap		 = mApp.getProperty("pETAfromLap");
          uPacefield		 	= mApp.getProperty("pPacefield");
-         uRequiredPower		 = mApp.getProperty("pRequiredPower");
-         uWarningFreq		 = mApp.getProperty("pWarningFreq");
-         uAlertbeep			 = mApp.getProperty("pAlertbeep");
-                  
+         
         if (uRacedistance < 1) { 
 			uRacedistance 		= 42195;
 		}
-
 
         if (System.getDeviceSettings().paceUnits == System.UNIT_STATUTE) {
             unitP = 1609.344;
@@ -215,30 +205,6 @@ class DatarunView extends Toybox.WatchUi.DataField {
 		Lapaction ();
 	}
 
-    //! Timer transitions from stopped to running state
-    function onTimerStart() {
-        startStopPushed();
-    }
-
-
-    //! Timer transitions from running to stopped state
-    function onTimerStop() {
-        startStopPushed();
-    }
-    
-    //! Start/stop button was pushed - emulated via timer start/stop
-    function startStopPushed() {
-        var info = Activity.getActivityInfo();
-        var doublePressTimeMs = null;
-        if ( mStartStopPushed > 0  &&  info.elapsedTime > 0 ) {
-            doublePressTimeMs = info.elapsedTime - mStartStopPushed;
-        }
-        if ( doublePressTimeMs != null  &&  doublePressTimeMs < 5000 ) {
-            uNoAlerts = !uNoAlerts;
-        }
-        mStartStopPushed = (info.elapsedTime != null) ? info.elapsedTime : 0;
-    }
-
     //! Current activity is ended
     function onTimerReset() {
         mPrevElapsedDistance        = 0;
@@ -259,13 +225,6 @@ class DatarunView extends Toybox.WatchUi.DataField {
     function onUpdate(dc) {
         var info = Activity.getActivityInfo();
     	
-
-    	var SPower = 0;  
-   		if (info.currentPower != null) {
-   			SPower = info.currentPower;
-   		} 
-		
-		
     	//! Setup back- and foregroundcolours
         var mColour;
         var mColourFont;
@@ -287,7 +246,7 @@ class DatarunView extends Toybox.WatchUi.DataField {
 		
 		//! Set background color
         dc.setColor(mColourBackGround, Graphics.COLOR_TRANSPARENT);
-        dc.fillRectangle (0, 0, 280, 280);
+        dc.fillRectangle (0, 0, 240, 240);
         	
     	//! Check license
 		if (is24Hour == false) {
@@ -303,12 +262,7 @@ class DatarunView extends Toybox.WatchUi.DataField {
 		var deviceID1 = (screenWidth-screenShape)*(screenHeight+distanceUnits)+numberis24Hour+numberisTouchScreen;
 		var deviceID2 = numberis24Hour+numberisTouchScreen;
 		var mtest = (numberisTouchScreen+distanceUnits)*screenWidth+(screenHeight-numberis24Hour)*screenShape;
-
-		//! Training effect
-		if (info.trainingEffect != null) {
-            mtrainingEffect = info.trainingEffect;
-        }		
-			
+		
         //! Calculate lap distance
         var mLapElapsedDistance = 0.0;
         if (info.elapsedDistance != null) {
@@ -334,39 +288,6 @@ class DatarunView extends Toybox.WatchUi.DataField {
             mLastLapSpeed = mLastLapElapsedDistance / mLastLapTimerTime;
         }
 
-		//!Calculate power metrics
-        var mPowerWarningunder = uRequiredPower.substring(0, 3);
-        var mPowerWarningupper = uRequiredPower.substring(4, 7);
-        mPowerWarningunder = mPowerWarningunder.toNumber();
-        mPowerWarningupper = mPowerWarningupper.toNumber(); 
-
-		//! Alert when out of predefined powerzone
-		var vibrateData = [
-			new Attention.VibeProfile( 100, 100 )
-		];
-		var DisplayPower  = (info.currentPower != null) ? info.currentPower : 0;
-		if (DisplayPower>mPowerWarningupper or DisplayPower<mPowerWarningunder) {
-			 //!Toybox.Attention.playTone(TONE_LOUD_BEEP);		 
-			 if (Toybox.Attention has :vibrate && uNoAlerts == false) {
-			 	vibrateseconds = vibrateseconds + 1;	 		  			
-    			if (vibrateseconds == uWarningFreq) {
-    				if (DisplayPower>mPowerWarningupper) {
-    					Toybox.Attention.vibrate(vibrateData);
-    					if (uAlertbeep == true) {
-    						Attention.playTone(Attention.TONE_LOW_BATTERY);
-    					}
-    				} else {
-    					if (uAlertbeep == true) {
-    						Attention.playTone(Attention.TONE_LOUD_BEEP);
-    					}
-    				Toybox.Attention.vibrate(vibrateData);
-    				}
-    				vibrateseconds = 0;
-    			}	
-			 }
-			 
-		}	
-		
 
         //! Calculate ETA
         if (info.elapsedDistance != null && info.timerTime != null) {
@@ -385,6 +306,7 @@ class DatarunView extends Toybox.WatchUi.DataField {
             }
         }
 
+
 		//! Determine required finish time and calculate required pace 	
         var mRacehour = uRacetime.substring(0, 2);
         var mRacemin = uRacetime.substring(3, 5);
@@ -400,7 +322,8 @@ class DatarunView extends Toybox.WatchUi.DataField {
         		uShowDemo = true;        		
         	}
         }
-
+        
+       
         
 
      if (uShowDemo == false ) {
@@ -410,7 +333,7 @@ class DatarunView extends Toybox.WatchUi.DataField {
 		
         //! HR zone
         mColour = Graphics.COLOR_LT_GRAY; //! No zone default light grey
-        var mCurrentHeartRate = "--";
+        var mCurrentHeartRate = 0;
         var  mCurrentHeartZone = 1;
         if (info.currentHeartRate != null) {
             mCurrentHeartRate = info.currentHeartRate;
@@ -432,10 +355,9 @@ class DatarunView extends Toybox.WatchUi.DataField {
         }
         if (uHeartratefield != 2 ) {
         	dc.setColor(mColour, Graphics.COLOR_TRANSPARENT);
-        	dc.fillRectangle(0, 108, 84, 23);
+        	dc.fillRectangle(0, 101, 78, 21);
         }
 
-        //! Cadence zone (fixed thresholds and colours to match Garmin Connect)
         var mColourCadence = Graphics.COLOR_LT_GRAY;
         if (info.currentCadence != null) {
             if (info.currentCadence > 183) {
@@ -452,34 +374,34 @@ class DatarunView extends Toybox.WatchUi.DataField {
         }
         if (uMiddlerightMetric == 13) {
         	dc.setColor(mColourCadence, Graphics.COLOR_TRANSPARENT);
-        	dc.fillRectangle(193, 108, 90, 23);
+        	dc.fillRectangle(179, 101, 83, 21);
 		}
-		
+
 		//! Draw separator lines
         dc.setColor(mColourLine, Graphics.COLOR_TRANSPARENT);
         dc.setPenWidth(2);
 
         //! Horizontal thirds
-        dc.drawLine(0,   107,  277, 107);
-        dc.drawLine(0,   182, 277, 182);
+        dc.drawLine(0,   100,  257, 100);
+        dc.drawLine(0,   169, 257, 169);
 
         //! Top vertical divider
-        dc.drawLine(139, 34,  139, 107);
+        dc.drawLine(129, 31,  129, 100);
 
         //! Centre vertical dividers
         if (uHeartratefield != 2 ) {
-            dc.drawLine(85,  107,  85,  182);
+            dc.drawLine(79,  100,  79,  169);
         }
-        dc.drawLine(191, 107,  191, 182);
+        dc.drawLine(178, 100,  178, 169);
 
         //! Bottom vertical divider
-        dc.drawLine(139, 182, 139, 260);
+        dc.drawLine(129, 169, 129, 242);
         
         //! Bottom horizontal divider
-        dc.drawLine(62, 260, 218, 260);
+        dc.drawLine(57, 242, 199, 242);
 
         //! Top centre mini-field separator
-        dc.drawRoundedRectangle(92, -13, 92, 47, 5);
+        dc.drawRoundedRectangle(86, -12, 86, 43, 4);
 
         //!
         //! Draw field values
@@ -492,12 +414,12 @@ class DatarunView extends Toybox.WatchUi.DataField {
 		
 		//! Show number of laps or clock with current time in top
 		if (uShowlaps == true) {
-			 dc.drawText(123, -5, Graphics.FONT_MEDIUM, mLaps, Graphics.TEXT_JUSTIFY_CENTER);
-			 dc.drawText(163, 0, Graphics.FONT_XTINY, "lap", Graphics.TEXT_JUSTIFY_CENTER);
+			 dc.drawText(114, -4, Graphics.FONT_MEDIUM, mLaps, Graphics.TEXT_JUSTIFY_CENTER);
+			 dc.drawText(152, 0, Graphics.FONT_XTINY, "lap", Graphics.TEXT_JUSTIFY_CENTER);
 		} else {
 			var myTime = Toybox.System.getClockTime(); 
 	    	var strTime = myTime.hour.format("%02d") + ":" + myTime.min.format("%02d");
-			dc.drawText(138, -5, Graphics.FONT_MEDIUM, strTime, Graphics.TEXT_JUSTIFY_CENTER);
+			dc.drawText(128, -4, Graphics.FONT_MEDIUM, strTime, Graphics.TEXT_JUSTIFY_CENTER);
 		}
 		
         //! Top row left: time
@@ -516,15 +438,15 @@ class DatarunView extends Toybox.WatchUi.DataField {
 
         var fTimerSecs = (mTime % 60).format("%02d");
         var fTimer = (mTime / 60).format("%d") + ":" + fTimerSecs;  //! Format time as m:ss
-        var x = 83;       
+        var x = 77;      
         if (mTime > 3599) {
             //! (Re-)format time as h:mm(ss) if more than an hour
             fTimer = (mTime / 3600).format("%d") + ":" + (mTime / 60 % 60).format("%02d");
-            x = 65;
-            dc.drawText(99, 70, Graphics.FONT_SMALL, fTimerSecs, Graphics.TEXT_JUSTIFY_LEFT|Graphics.TEXT_JUSTIFY_VCENTER);
+            x = 62;
+            dc.drawText(102, 66, Graphics.FONT_MEDIUM, fTimerSecs, Graphics.TEXT_JUSTIFY_LEFT|Graphics.TEXT_JUSTIFY_VCENTER);
         }
-        dc.drawText(x, 79, Garminfont, fTimer, Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
-        dc.drawText(88, 44, Graphics.FONT_XTINY,  lTime, Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
+        dc.drawText(x, 75, Garminfont, fTimer, Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
+        dc.drawText(81, 41, Graphics.FONT_XTINY,  lTime, Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
 
         //! Top row right: distance
         var mDistance = (info.elapsedDistance != null) ? info.elapsedDistance / unitD : 0;
@@ -541,8 +463,10 @@ class DatarunView extends Toybox.WatchUi.DataField {
          if (mDistance > 100) {
              fString = "%.1f";
          }
-        dc.drawText(198, 79, Garminfont, mDistance.format(fString), Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
-        dc.drawText(193, 44, Graphics.FONT_XTINY,  lDistance, Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
+         
+         
+        dc.drawText(184, 75, Garminfont, mDistance.format(fString), Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
+        dc.drawText(179, 41, Graphics.FONT_XTINY,  lDistance, Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
 
         //! Centre middle: current pace
         var Averagespeedinmpersec 			= 0;
@@ -583,25 +507,25 @@ class DatarunView extends Toybox.WatchUi.DataField {
          	
 			if ( uPacefield == 0 ) {
             	if (uHeartratefield != 2 ) {
-            		dc.drawText(138, 155, Garminfont, fmtPace(fCurrentPace), Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
+            		dc.drawText(127, 144, Garminfont, fmtPace(fCurrentPace), Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
             	} else {
-            		dc.drawText(112, 146, Graphics.FONT_NUMBER_HOT, fmtPace(fCurrentPace), Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
+            		dc.drawText(104, 135, Graphics.FONT_NUMBER_HOT, fmtPace(fCurrentPace), Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
             	}
             } else if (uPacefield == 1) {
             	var fCurrentPace = 100/info.currentSpeed;
             	fString = "%.1f";
             	if (uHeartratefield != 2 ) {
-            		dc.drawText(138, 155, Garminfont, fCurrentPace.format(fString), Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
+            		dc.drawText(127, 144, Garminfont, fCurrentPace.format(fString), Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
             	} else {
-            		dc.drawText(112, 146, Graphics.FONT_NUMBER_HOT, fCurrentPace.format(fString), Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
+            		dc.drawText(104, 135, Graphics.FONT_NUMBER_HOT, fCurrentPace.format(fString), Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
             	}
             } else {
             	var fCurrentPace = 3.6*info.currentSpeed*1000/unitP;
             	fString = "%.1f";
             	if (uHeartratefield != 2 ) {
-            		dc.drawText(118, 133, Garminfont, fCurrentPace.format(fString), Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
+            		dc.drawText(127, 144, Garminfont, fCurrentPace.format(fString), Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
             	} else {
-            		dc.drawText(96, 125, Graphics.FONT_NUMBER_HOT, fCurrentPace.format(fString), Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
+            		dc.drawText(104, 135, Graphics.FONT_NUMBER_HOT, fCurrentPace.format(fString), Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
             	}
 
             }
@@ -655,7 +579,7 @@ class DatarunView extends Toybox.WatchUi.DataField {
         
         dc.setColor(mColour, Graphics.COLOR_TRANSPARENT);
         if (uHeartratefield != 2 ) {
-        	dc.fillRectangle(86, 108, 104, 23);
+        	dc.fillRectangle(80, 101, 97, 21);
         	if ( uTargetPaceMetric > 2 ) {
             	mColour = mColourFont;
         	} else {
@@ -663,9 +587,9 @@ class DatarunView extends Toybox.WatchUi.DataField {
         	}
         	dc.setColor(mColour, Graphics.COLOR_TRANSPARENT);
         	if ( uPacefield == 2 ) {
-        		dc.drawText(138, 118, Graphics.FONT_XTINY,  "Speed", Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
+        		dc.drawText(128, 109, Graphics.FONT_XTINY,  "Speed", Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
         	} else {	
-        		dc.drawText(138, 118, Graphics.FONT_XTINY,  "Pace", Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
+        		dc.drawText(128, 109, Graphics.FONT_XTINY,  "Pace", Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
         	}
 		} else {
 			if ( uTargetPaceMetric > 2 ) {
@@ -673,17 +597,17 @@ class DatarunView extends Toybox.WatchUi.DataField {
         	} else {
         		mColour = mColourBackGround;
         	}
-			dc.fillRectangle(0, 108, 34, 73);
+			dc.fillRectangle(0, 101, 34, 67);
             dc.setColor(mColour, Graphics.COLOR_TRANSPARENT);
             if ( uPacefield == 2 ) {
-            	dc.drawText(18, 121, Graphics.FONT_XTINY,  "S", Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
-        		dc.drawText(18, 144, Graphics.FONT_XTINY,  "p", Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
-        		dc.drawText(18, 166, Graphics.FONT_XTINY,  "d", Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
+            	dc.drawText(16, 113, Graphics.FONT_XTINY,  "S", Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
+        		dc.drawText(16, 144, Graphics.FONT_XTINY,  "p", Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
+        		dc.drawText(16, 154, Graphics.FONT_XTINY,  "d", Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
             } else {
-        		dc.drawText(18, 119, Graphics.FONT_XTINY,  "P", Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
-        		dc.drawText(18, 135, Graphics.FONT_XTINY,  "a", Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
-        		dc.drawText(18, 152, Graphics.FONT_XTINY,  "c", Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
-        		dc.drawText(18, 168, Graphics.FONT_XTINY,  "e", Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
+        		dc.drawText(16, 111, Graphics.FONT_XTINY,  "P", Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
+        		dc.drawText(16, 126, Graphics.FONT_XTINY,  "a", Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
+        		dc.drawText(16, 141, Graphics.FONT_XTINY,  "c", Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
+        		dc.drawText(16, 156, Graphics.FONT_XTINY,  "e", Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
         	}
 		}
 		
@@ -692,17 +616,17 @@ class DatarunView extends Toybox.WatchUi.DataField {
         //! Centre left: heart rate 
         if (uHeartratefield != 2 ) {
         	if (uHeartratefield == 0) {
-            	dc.drawText(40, 155, Garminfont, mCurrentHeartRate, Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
-        		dc.drawText(42, 118, Graphics.FONT_XTINY, "HR", Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
+            	dc.drawText(37, 144, Garminfont, mCurrentHeartRate, Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
+        		dc.drawText(39, 109, Graphics.FONT_XTINY, "HR", Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
             } else {
-            	dc.drawText(40, 155, Garminfont, mCurrentHeartZone, Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
-        		dc.drawText(42, 118, Graphics.FONT_XTINY, "HR zone", Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
+            	dc.drawText(37, 144, Garminfont, mCurrentHeartZone, Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
+        		dc.drawText(39, 109, Graphics.FONT_XTINY, "HR zone", Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
             }
             		
 		}
-
 		
         //! Centre right: cadence
+
         var fieldValue     = 0.0;
         var fieldLabel     = "A Pace";
         var isPace         = true;
@@ -745,10 +669,10 @@ class DatarunView extends Toybox.WatchUi.DataField {
            	fieldValue = mCurrentHeartZone;
             fieldLabel = "HR zone";
         }  else if (uMiddlerightMetric == 11) {
-           	fieldValue = SPower;
+           	fieldValue = 999;
             fieldLabel = "Power";
         }  else if (uMiddlerightMetric == 12) {
-           	fieldValue = mtrainingEffect;
+           	fieldValue = 9.99;
             fieldLabel = "T effect";
         }  else if (uMiddlerightMetric == 13) {
            	fieldValue = (info.currentCadence != null) ? info.currentCadence : 0;
@@ -762,25 +686,25 @@ class DatarunView extends Toybox.WatchUi.DataField {
         		mColour = Graphics.COLOR_RED;
         	}
         	dc.setColor(mColour, Graphics.COLOR_TRANSPARENT);
-        	dc.fillRectangle(193, 108, 90, 23);
+        	dc.fillRectangle(179, 101, 83, 21);
         	mColour = mColourFont1;	
         	dc.setColor(mColour, Graphics.COLOR_TRANSPARENT);
         }	
         	
         if ( uMiddlerightMetric == 7 ) {
-        	dc.drawText(231, 155, Garminfont, EstimatedTimeSmall(fieldValue) , Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
+        	dc.drawText(215, 144, Garminfont, EstimatedTimeSmall(fieldValue) , Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
        	} else if (uMiddlerightMetric == 6) {    
-			dc.drawText(235, 155, Garminfont, fieldValue , Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
+        	dc.drawText(218, 144, Garminfont , fieldValue , Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
         } else if (uMiddlerightMetric == 0 or uMiddlerightMetric == 1 or uMiddlerightMetric == 2 or uMiddlerightMetric == 8 ) {
         	if (fieldValue > 0) {
-            	dc.drawText(235, 155, Garminfont, (isPace) ? fmtPace(fieldValue) : fieldValue, Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
+            	dc.drawText(218, 144, Garminfont, (isPace) ? fmtPace(fieldValue) : fieldValue, Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
             }
         } else if ( uMiddlerightMetric == 3 or uMiddlerightMetric == 4 or uMiddlerightMetric == 5 or uMiddlerightMetric == 9 or uMiddlerightMetric == 10 or uMiddlerightMetric == 11 or uMiddlerightMetric == 13 ) {
-        	dc.drawText(231, 155, Garminfont, (info.altitude != null) ? fieldValue : 0, Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
+        	dc.drawText(215, 144, Garminfont, (info.altitude != null) ? fieldValue : 0, Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
         } else if ( uMiddlerightMetric == 12 ) {
-        	dc.drawText(235, 155, Garminfont, fieldValue.format("%.2f"), Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
+        	dc.drawText(218, 144, Garminfont, fieldValue.format("%.2f"), Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
         }      
-        dc.drawText(235, 118, Graphics.FONT_XTINY, fieldLabel, Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
+        dc.drawText(218, 109, Graphics.FONT_XTINY, fieldLabel, Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
         
         //! Bottom left
         fieldValue     = 0.0;
@@ -835,10 +759,8 @@ class DatarunView extends Toybox.WatchUi.DataField {
            	fieldValue = mCurrentHeartZone;
             fieldLabel = "HR zone";
         }  else if (uBottomLeftMetric == 11) {
-           	fieldValue = SPower;
             fieldLabel = "Power";
-        }  else if (uBottomLeftMetric == 12) {
-           	fieldValue = mtrainingEffect;
+        } else if (uBottomLeftMetric == 12) {
             fieldLabel = "T effect";
         }
         
@@ -849,25 +771,23 @@ class DatarunView extends Toybox.WatchUi.DataField {
         		mColour = Graphics.COLOR_RED;
         	}
         	dc.setColor(mColour, Graphics.COLOR_TRANSPARENT);
-        	dc.fillRectangle(21, 235, 117, 25);
+        	dc.fillRectangle(20, 218, 108, 23);
         	mColour = mColourFont1;	
         	dc.setColor(mColour, Graphics.COLOR_TRANSPARENT);
         }	
         	
         if ( uBottomLeftMetric == 7 ) {
-        	dc.drawText(81, 207, Garminfont, EstimatedTimeSmall(fieldValue) , Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
+        	dc.drawText(75, 192, Garminfont, EstimatedTimeSmall(fieldValue) , Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
        	} else if (uBottomLeftMetric == 6) {    
-			dc.drawText(79, 207, Graphics.FONT_MEDIUM, EstimatedTime(fieldValue) , Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
+        	dc.drawText(74, 192, Graphics.FONT_MEDIUM, EstimatedTime(fieldValue) , Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);			
         } else if (uBottomLeftMetric == 0 or uBottomLeftMetric == 1 or uBottomLeftMetric == 2 or uBottomLeftMetric == 8 ) {
         	if (fieldValue > 0) {
-            	dc.drawText(81, 207, Garminfont, (isPace) ? fmtPace(fieldValue) : fieldValue, Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
+            	dc.drawText(75, 192, Garminfont, (isPace) ? fmtPace(fieldValue) : fieldValue, Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
             }
-        } else if ( uBottomLeftMetric == 3 or uBottomLeftMetric == 4 or uBottomLeftMetric == 5 or uBottomLeftMetric == 9 or uBottomLeftMetric == 10 or uBottomLeftMetric == 11 ) {
-        	dc.drawText(81, 207, Garminfont, (info.altitude != null) ? fieldValue : 0, Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
-        } else if ( uBottomLeftMetric == 12 ) {
-        	dc.drawText(81, 207, Garminfont, fieldValue.format("%.2f"), Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
-        }      
-        dc.drawText(93, 244, Graphics.FONT_XTINY, fieldLabel, Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
+        } else if ( uBottomLeftMetric == 3 or uBottomLeftMetric == 4 or uBottomLeftMetric == 5 or uBottomLeftMetric == 9 or uBottomLeftMetric == 10 ) {
+        	dc.drawText(75, 192, Garminfont, (info.altitude != null) ? fieldValue : 0, Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
+        }
+        dc.drawText(87, 226, Graphics.FONT_XTINY, fieldLabel, Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
 
         //! Bottom right
         fieldValue     = 0.0;
@@ -922,13 +842,10 @@ class DatarunView extends Toybox.WatchUi.DataField {
            	fieldValue = mCurrentHeartZone;
             fieldLabel = "HR zone";
         }  else if (uBottomRightMetric == 11) {
-           	fieldValue = SPower;
             fieldLabel = "Power";
-        }  else if (uBottomRightMetric == 12) {
-           	fieldValue = mtrainingEffect;
+        } else if (uBottomRightMetric == 12) {
             fieldLabel = "T effect";
         }
-       
         if (uBottomRightMetric == 6 or uBottomRightMetric == 7 or uBottomRightMetric == 8) {
           	if (mETA < mRacetime) {
         		mColour = Graphics.COLOR_GREEN;
@@ -936,47 +853,45 @@ class DatarunView extends Toybox.WatchUi.DataField {
         		mColour = Graphics.COLOR_RED;
         	}
         	dc.setColor(mColour, Graphics.COLOR_TRANSPARENT);
-        	dc.fillRectangle(140, 235, 117, 25);
+        	dc.fillRectangle(130, 218, 108, 23);
         	mColour = mColourFont1;	
         	dc.setColor(mColour, Graphics.COLOR_TRANSPARENT);
         }	
         	
         if ( uBottomRightMetric == 7 ) {
-        	dc.drawText(196, 207, Garminfont, EstimatedTimeSmall(fieldValue) , Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
+        	dc.drawText(181, 192, Garminfont, EstimatedTimeSmall(fieldValue) , Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
        	} else if (uBottomRightMetric == 6) {    
-   			dc.drawText(198, 207, Graphics.FONT_MEDIUM, EstimatedTime(fieldValue) , Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
+        		dc.drawText(184, 192, Graphics.FONT_MEDIUM, EstimatedTime(fieldValue) , Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
         } else if (uBottomRightMetric == 0 or uBottomRightMetric == 1 or uBottomRightMetric == 2 or uBottomRightMetric == 8 ) {
         	if (fieldValue > 0) {
-            	dc.drawText(193, 207, Garminfont, (isPace) ? fmtPace(fieldValue) : fieldValue, Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
+            	dc.drawText(179, 192, Garminfont, (isPace) ? fmtPace(fieldValue) : fieldValue, Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
             }
-        } else if ( uBottomRightMetric == 3 or uBottomRightMetric == 4 or uBottomRightMetric == 5 or uBottomRightMetric == 9 or uBottomRightMetric == 10 or uBottomRightMetric == 11) {
-        	dc.drawText(193, 207, Garminfont, (info.altitude != null) ? fieldValue : 0, Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
-        } else if ( uBottomRightMetric == 12 ) {
-        	dc.drawText(193, 207, Garminfont, fieldValue.format("%.2f"), Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
+        } else if ( uBottomRightMetric == 3 or uBottomRightMetric == 4 or uBottomRightMetric == 5 or uBottomRightMetric == 9 or uBottomRightMetric == 10) {
+        	dc.drawText(179, 192, Garminfont, (info.altitude != null) ? fieldValue : 0, Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
         }
-        dc.drawText(182, 244, Graphics.FONT_XTINY, fieldLabel, Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
+        dc.drawText(169, 226, Graphics.FONT_XTINY, fieldLabel, Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
         
         
 		//! Bottom battery indicator
 		var stats = Sys.getSystemStats();
 		var pwr = stats.battery;
 		dc.setColor(mColourFont, Graphics.COLOR_TRANSPARENT);
-		dc.fillRectangle(107, 263, 63, 15);
-		dc.fillRectangle(170, 266, 4, 7);
+		dc.fillRectangle(100, 244, 59, 14);
+		dc.fillRectangle(158, 247, 3, 7);
 		
 		dc.setColor(mColourFont, Graphics.COLOR_TRANSPARENT);
-		dc.fillRectangle(110, 265, 58, 11);
+		dc.fillRectangle(102, 246, 54, 10);
 		
 		dc.setColor(mColourBackGround, Graphics.COLOR_TRANSPARENT);
-		var Startstatuspwrbr = 110 + pwr*0.5*28/24  ;
-		var Endstatuspwrbr = 58 - pwr*0.5*28/24 ;
-		dc.fillRectangle(Startstatuspwrbr, 265, Endstatuspwrbr, 11);		
+		var Startstatuspwrbr = 102 + pwr*0.54  ;
+		var Endstatuspwrbr = 54 - pwr*0.54 ;
+		dc.fillRectangle(Startstatuspwrbr, 246, Endstatuspwrbr, 10);		
         
       } else {
 		dc.setColor(mColourFont, Graphics.COLOR_TRANSPARENT);
 
 		if (umyNumber == mtest) {
-			dc.drawText(138, 140, Graphics.FONT_XTINY, "Registered !!", Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
+			dc.drawText(118, 120, Graphics.FONT_XTINY, "Registered !!", Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
 			dc.drawText(81, 160, Graphics.FONT_XTINY, "License code: ", Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
 			dc.drawText(180, 160, Graphics.FONT_XTINY, mtest, Graphics.TEXT_JUSTIFY_CENTER|Graphics.TEXT_JUSTIFY_VCENTER);
 		} else {
